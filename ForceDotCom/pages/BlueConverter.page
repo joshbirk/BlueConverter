@@ -1,0 +1,303 @@
+<apex:page Controller="BlueConverter" showheader="false" standardStyleSheets="false" contentType="{!contentType}" >
+	<apex:outputPanel layout="none" rendered="{!NOT(isDownload)}">
+	<style>
+		body, td { 
+			font-family: Verdana, Courier;
+			font-size: 10px;
+			}
+		h2 { font-size: 14px; }
+	</style>
+	<apex:form rendered="{!NOT(isDownload)}">
+		<apex:outputPanel layout="none" rendered="{!documentBody == ''}">
+			<div style="width: 100%; margin-left: 25%; padding-top: 200px;">
+				<div style="width: 400px; padding: 20px; border: 1px solid black">
+					<h2>Upload BlueButton text file or 'Use Sample'</h2>
+					<apex:inputFile value="{!document.body}" filename="{!document.name}" id="file"/>
+					<apex:commandButton value="Upload" action="{!upload}" />&nbsp;
+					<apex:commandButton value="Use Sample" action="{!useSample}" /> 
+					<hr />
+					Developed on the <a href="http://developer.force.com">Force.com</a> platform.
+				</div>
+			</div>
+		</apex:outputPanel>
+	</apex:form>	
+	
+	<apex:outputPanel rendered="{!documentBody != ''}" layout="none">
+	<apex:outputPanel rendered="{!NOT(isDownload)}">
+		<div style="position: fixed; top: 0px; width: 100%; background-color: white; border-bottom: 1px solid black; height: 20px; z-index: 100;">
+			<input type="text" id="searchText" /><button onclick="searchPrompt('',false,'black','#FFCC11')">Highlight</button> |
+			<button onclick="searchWebMD()">Search WebMD For Selected Text</button>
+			<button onclick="searchGoogle()">Search Google For Selected Text</button>|
+		</div>
+	</apex:outputPanel>
+		<div style="position: absolute; top: 25px; z-index: 10; left: 20px;">
+		<apex:tabPanel switchType="client" id="theTabPanel" rendered="{!NOT(isDownload)}" >
+		<apex:tab label="Plain Text" id="tabOne">
+		 <pre id='plain'>	
+			{!documentBody}
+		 </pre>
+		</apex:tab>
+		<apex:tab label="HTML" id="tabTwo">
+		<table>
+		<apex:repeat value="{!blueData}" var="blue">
+				<tr><th colspan="4"><h2 style='text-align: left'>{!blue.Name}</h2></th></tr>
+				<apex:repeat value="{!blue.data}" var="data" >
+				 	<apex:outputText escape="false" value="<tr>" rendered="{ISFALSE(!data.endTD)}" />
+					<td style="font-weight: bold; text-align: right">{!data.key}:</td><td style="background-color: white;">{!data.value}</td>
+				 	<apex:outputText escape="false" value="</tr>" rendered="{!data.endTD}"  />
+				</apex:repeat>
+		</apex:repeat>
+		</table>
+		</apex:tab>
+		<apex:tab label="JSON" id="tabThree">
+		<pre>
+			{ "BlueButtonData" : [ <apex:repeat value="{!blueData}" var="blue">
+			<apex:outputPanel rendered="{!blue.name != ''}" layout="none">"{!blue.name}" : {</apex:outputPanel>
+			<apex:outputPanel rendered="{!blue.name == ''}" layout="none">"AdditionalInformation" : {</apex:outputPanel>
+			<apex:repeat value="{!blue.data}" var="data" >
+				"{!data.key}": "{!data.value}",
+			</apex:repeat>
+			"eoc" : true
+			},
+			</apex:repeat>
+			{ "eof" : true }
+			]
+		}
+		</pre>
+		</apex:tab>
+		<apex:tab label="XML" id="tabFour">
+		<!--
+			<textarea style="width: 500px; height: 500px; word-wrap:break-word; text-wrap:unrestricted">
+		-->
+		<apex:outputText escape="true" value="<xml>" />
+		
+		<apex:repeat value="{!blueData}" var="blue">
+		<apex:outputText escape="true" value="<{!blue.name}>" rendered="{!blue.name != ''}" />
+		<apex:outputText escape="true" value="<AdditionalInformation>" rendered="{!blue.name == ''}" />
+		<BR />
+		<apex:repeat value="{!blue.data}" var="data" >
+		&nbsp;&nbsp;<apex:outputText escape="true" value="<{!data.key}>" />{!data.value}<apex:outputText escape="true" value="</{!data.key}>" /><BR />
+		</apex:repeat>
+		<apex:outputText escape="true" value="</{!blue.name}>" rendered="{!blue.name != ''}" />
+		<apex:outputText escape="true" value="</AdditionalInformation>" rendered="{!blue.name == ''}" />
+		<BR />
+		</apex:repeat>
+		<apex:outputText escape="true" value="</xml>" />
+		
+	<!--	</textarea> -->
+		</apex:tab>
+		</apex:tabPanel>
+		</div>
+		</apex:outputPanel>
+		
+		
+		<script >
+		function getSelectedText() {
+			var t = '';
+			  if(window.getSelection){
+			    t = window.getSelection();
+			  }else if(document.getSelection){
+			    t = document.getSelection();
+			  }else if(document.selection){
+			    t = document.selection.createRange().text;
+			  }
+			return t;
+		}
+		
+		function searchWebMD() {
+			t = getSelectedText();
+			window.open('http://www.webmd.com/search/search_results/default.aspx?query='+t,'webmd');
+		}
+		
+		function searchGoogle() {
+			t = getSelectedText();
+			window.open('http://www.google.com?q='+t,'google');
+		}
+		
+		
+		/*
+		 * This is the function that actually highlights a text string by
+		 * adding HTML tags before and after all occurrences of the search
+		 * term. You can pass your own tags if you'd like, or if the
+		 * highlightStartTag or highlightEndTag parameters are omitted or
+		 * are empty strings then the default <font> tags will be used.
+		 */
+		function doHighlight(bodyText, searchTerm, highlightStartTag, highlightEndTag) 
+		{
+		  // the highlightStartTag and highlightEndTag parameters are optional
+		  if ((!highlightStartTag) || (!highlightEndTag)) {
+		    highlightStartTag = "<font style='color:blue; background-color:yellow;'>";
+		    highlightEndTag = "</font>";
+		  }
+
+		  // find all occurences of the search term in the given text,
+		  // and add some "highlight" tags to them (we're not using a
+		  // regular expression search, because we want to filter out
+		  // matches that occur within HTML tags and script blocks, so
+		  // we have to do a little extra validation)
+		  var newText = "";
+		  var i = -1;
+		  var lcSearchTerm = searchTerm.toLowerCase();
+		  var lcBodyText = bodyText.toLowerCase();
+
+		  while (bodyText.length > 0) {
+		    i = lcBodyText.indexOf(lcSearchTerm, i+1);
+		    if (i < 0) {
+		      newText += bodyText;
+		      bodyText = "";
+		    } else {
+		      // skip anything inside an HTML tag
+		      if (bodyText.lastIndexOf(">", i) >= bodyText.lastIndexOf("<", i)) {
+		        // skip anything inside a <script> block
+		        if (lcBodyText.lastIndexOf("/script>", i) >= lcBodyText.lastIndexOf("<script", i)) {
+		          newText += bodyText.substring(0, i) + highlightStartTag + bodyText.substr(i, searchTerm.length) + highlightEndTag;
+		          bodyText = bodyText.substr(i + searchTerm.length);
+		          lcBodyText = bodyText.toLowerCase();
+		          i = -1;
+		        }
+		      }
+		    }
+		  }
+
+		  return newText;
+		}
+
+
+		/*
+		 * This is sort of a wrapper function to the doHighlight function.
+		 * It takes the searchText that you pass, optionally splits it into
+		 * separate words, and transforms the text on the current web page.
+		 * Only the "searchText" parameter is required; all other parameters
+		 * are optional and can be omitted.
+		 */
+		function highlightSearchTerms(searchText, treatAsPhrase, warnOnFailure, highlightStartTag, highlightEndTag)
+		{
+		  // if the treatAsPhrase parameter is true, then we should search for 
+		  // the entire phrase that was entered; otherwise, we will split the
+		  // search string so that each word is searched for and highlighted
+		  // individually
+		  if (treatAsPhrase) {
+		    searchArray = [searchText];
+		  } else {
+		    searchArray = searchText.split(" ");
+		  }
+
+		  if (!document.body || typeof(document.body.innerHTML) == "undefined") {
+		    if (warnOnFailure) {
+		      alert("Sorry, for some reason the text of this page is unavailable. Searching will not work.");
+		    }
+		    return false;
+		  }
+
+		  var bodyText = document.body.innerHTML;
+		  for (var i = 0; i < searchArray.length; i++) {
+		    bodyText = doHighlight(bodyText, searchArray[i], highlightStartTag, highlightEndTag);
+		  }
+
+		  document.body.innerHTML = bodyText;
+		  return true;
+		}
+
+
+		/*
+		 * This displays a dialog box that allows a user to enter their own
+		 * search terms to highlight on the page, and then passes the search
+		 * text or phrase to the highlightSearchTerms function. All parameters
+		 * are optional.
+		 */
+		function searchPrompt(defaultText, treatAsPhrase, textColor, bgColor)
+		{
+		  // This function prompts the user for any words that should
+		  // be highlighted on this web page
+		  if (!defaultText) {
+		    defaultText = "";
+		  }
+
+		  // we can optionally use our own highlight tag values
+		  if ((!textColor) || (!bgColor)) {
+		    highlightStartTag = "";
+		    highlightEndTag = "";
+		  } else {
+		    highlightStartTag = "<font style='color:" + textColor + "; background-color:" + bgColor + ";'>";
+		    highlightEndTag = "</font>";
+		  }
+
+	/*	  if (treatAsPhrase) {
+		    promptText = "Please enter the phrase you'd like to search for:";
+		  } else {
+		    promptText = "Please enter the words you'd like to search for, separated by spaces:";
+		  } */
+
+		  searchText = document.getElementById('searchText').value;
+
+		  if (!searchText)  {
+		    alert("No search terms were entered. Exiting function.");
+		    return false;
+		  }
+
+		  return highlightSearchTerms(searchText, treatAsPhrase, true, highlightStartTag, highlightEndTag);
+		}
+
+
+		/*
+		 * This function takes a referer/referrer string and parses it
+		 * to determine if it contains any search terms. If it does, the
+		 * search terms are passed to the highlightSearchTerms function
+		 * so they can be highlighted on the current page.
+		 */
+		function highlightGoogleSearchTerms(referrer)
+		{
+		  // This function has only been very lightly tested against
+		  // typical Google search URLs. If you wanted the Google search
+		  // terms to be automatically highlighted on a page, you could
+		  // call the function in the onload event of your <body> tag, 
+		  // like this:
+		  //   <body onload='highlightGoogleSearchTerms(document.referrer);'>
+
+		  //var referrer = document.referrer;
+		  if (!referrer) {
+		    return false;
+		  }
+
+		  var queryPrefix = "q=";
+		  var startPos = referrer.toLowerCase().indexOf(queryPrefix);
+		  if ((startPos < 0) || (startPos + queryPrefix.length == referrer.length)) {
+		    return false;
+		  }
+
+		  var endPos = referrer.indexOf("&", startPos);
+		  if (endPos < 0) {
+		    endPos = referrer.length;
+		  }
+
+		  var queryString = referrer.substring(startPos + queryPrefix.length, endPos);
+		  // fix the space characters
+		  queryString = queryString.replace(/%20/gi, " ");
+		  queryString = queryString.replace(/\+/gi, " ");
+		  // remove the quotes (if you're really creative, you could search for the
+		  // terms within the quotes as phrases, and everything else as single terms)
+		  queryString = queryString.replace(/%22/gi, "");
+		  queryString = queryString.replace(/\"/gi, "");
+
+		  return highlightSearchTerms(queryString, false);
+		}
+
+
+		/*
+		 * This function is just an easy way to test the highlightGoogleSearchTerms
+		 * function.
+		 */
+		function testHighlightGoogleSearchTerms()
+		{
+		  var referrerString = "http://www.google.com/search?q=javascript%20highlight&start=0";
+		  referrerString = prompt("Test the following referrer string:", referrerString);
+		  return highlightGoogleSearchTerms(referrerString);
+		}
+
+		init();
+		</script>
+		</apex:outputPanel>
+		
+		
+		
+</apex:page>
